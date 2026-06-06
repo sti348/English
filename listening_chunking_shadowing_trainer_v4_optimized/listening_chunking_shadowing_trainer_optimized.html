@@ -1,0 +1,1235 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Listening Chunking + Shadowing Trainer</title>
+<style>
+  :root {
+    --bg: #f7f7fb;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --slash: #dc2626;
+    --border: #e5e7eb;
+    --current: #fff7cc;
+    --current-border: #facc15;
+    --ok: #16a34a;
+    --danger: #dc2626;
+    --purple: #9333ea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(255,255,255,.96);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+  }
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 16px 18px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 6px;
+  }
+  .hint {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0;
+  }
+  .top-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    gap: 14px;
+    align-items: start;
+    margin-top: 12px;
+  }
+  @media (max-width: 900px) {
+    .top-layout { grid-template-columns: 1fr; }
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    align-items: center;
+  }
+  button, select, input[type="range"] { font: inherit; }
+  button, select {
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  button.primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  button.ok {
+    background: var(--ok);
+    color: white;
+    border-color: var(--ok);
+  }
+  button.danger {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+  }
+  button:hover, select:hover { filter: brightness(.98); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .small {
+    font-size: 13px;
+    padding: 6px 10px;
+  }
+  .side-settings {
+    border: 1px solid var(--border);
+    background: #f9fafb;
+    border-radius: 14px;
+    padding: 10px 12px;
+  }
+  .side-title {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .side-row {
+    display: grid;
+    grid-template-columns: 68px 1fr 45px;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
+    color: var(--muted);
+    margin: 4px 0;
+  }
+  .side-row input[type="range"] { width: 100%; }
+  .audio-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .mode {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  audio { width: min(520px, 100%); }
+  .panel {
+    max-width: 1120px;
+    margin: 18px auto;
+    padding: 0 18px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  }
+  #reader {
+    font-size: 22px;
+    line-height: 2.1;
+    user-select: none;
+  }
+  #reader.hidden { display: none; }
+  .para {
+    margin: 0 0 22px;
+    padding-bottom: 18px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .para:last-child { border-bottom: 0; }
+  .word {
+    display: inline-block;
+    padding: 1px 3px;
+    margin: 0 1px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .12s, outline .12s;
+  }
+  .word:hover { background: var(--accent-soft); }
+  .word.current {
+    background: var(--current);
+    outline: 1px solid var(--current-border);
+  }
+  .slash {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 32px;
+    color: transparent;
+    font-weight: 700;
+    margin: 0 -4px;
+    transform: translateY(-1px);
+    cursor: pointer;
+    border-radius: 6px;
+    vertical-align: middle;
+    transition: background .12s, color .12s;
+  }
+  .slash:hover {
+    background: var(--accent-soft);
+    color: color-mix(in srgb, var(--slash) 45%, transparent);
+  }
+  .slash.on {
+    color: var(--slash);
+  }
+  .slash.suggested {
+    color: var(--purple);
+  }
+  .stats {
+    color: var(--muted);
+    font-size: 14px;
+    margin-top: 10px;
+  }
+  .kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    padding: 1px 5px;
+    border-radius: 5px;
+  }
+  .note {
+    margin-top: 10px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  textarea {
+    width: 100%;
+    min-height: 150px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    display: none;
+    margin-top: 10px;
+  }
+  .status {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .download-row {
+    display: none;
+    margin-top: 8px;
+    font-size: 14px;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .download-row a {
+    display: inline-block;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 7px 10px;
+    background: #fff;
+    color: var(--accent);
+    font-weight: 700;
+    text-decoration: none;
+    margin-right: 0;
+  }
+  .download-row a:not([href]) {
+    color: var(--muted);
+    pointer-events: none;
+    opacity: .65;
+  }
+  .sentence-nav {
+    display: none;
+    margin: 0 0 14px;
+    padding: 10px;
+    background: #f9fafb;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    align-items: center;
+    gap: 9px;
+    flex-wrap: wrap;
+  }
+  .sentence-nav.show { display: flex; }
+  .current-box {
+    display: none;
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    background: #f9fafb;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--muted);
+  }
+  .current-box.show { display: block; }
+  .current-word-text {
+    color: var(--text);
+    font-weight: 750;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Listening Chunking + Shadowing Trainer</h1>
+    <p class="hint">Optimized for the bundled WAV. Click a word to place/remove a chunk mark <strong>/</strong>. During playback, the current word is highlighted with an audio-specific timing map.</p>
+
+    <div class="top-layout">
+      <div>
+        <div class="controls">
+          <button class="primary" id="speakBtn">&#9654; Read aloud</button>
+          <button id="pauseBtn">&#10074;&#10074; Pause</button>
+          <button id="stopBtn">&#9632; Stop</button>
+          <button class="ok" id="shadowBtn">&#9679; Start shadowing</button>
+          <button id="playSentence" class="small primary">Replay sentence (R)</button>
+          <button id="playNextSentence" class="small">Play next sentence (&rarr;)</button>
+          <select id="viewMode" title="Text view mode">
+            <option value="full">Full text</option>
+            <option value="short">Short sentence</option>
+            <option value="hide">Hide text</option>
+          </select>
+          <button id="clearBtn" class="small">Clear marks</button>
+          <button id="undoBtn" class="small">Undo</button>
+          <button id="suggestBtn" class="small">Show suggested chunks</button>
+          <button id="exportBtn" class="small">Export my chunks</button>
+        </div>
+
+        <div class="audio-row">
+          <label class="mode">Use another audio: <input id="audioFile" type="file" accept="audio/*"></label>
+          <audio id="audio" controls src="315193bb-6e18-4d59-808f-8f4cb4441663.wav"></audio>
+          <label class="mode"><input id="autoSaveRecordings" type="checkbox" checked> Auto-save recordings</label>
+        </div>
+
+        <div class="status" id="recordStatus">Bundled audio loaded. Highlighting uses embedded faster-whisper word timing.</div>
+        <div class="download-row" id="downloadRow">
+          <a id="downloadMixed" download="shadowing-mixed.webm">Download mixed audio</a>
+          <a id="downloadMicOnly" download="shadowing-mic-only.webm">Download mic-only audio</a>
+        </div>
+      </div>
+
+      <div class="side-settings">
+        <div class="side-title">Sound settings</div>
+        <div class="side-row">
+          <span>TTS rate</span>
+          <input id="rate" type="range" min="0.6" max="1.2" step="0.05" value="0.85">
+          <span id="rateText">0.85x</span>
+        </div>
+        <div class="side-row">
+          <span>Original</span>
+          <input id="bgGain" type="range" min="0" max="100" step="5" value="30">
+          <span id="bgGainText">30%</span>
+        </div>
+        <div class="side-row">
+          <span>Mic</span>
+          <input id="micGain" type="range" min="0" max="200" step="5" value="100">
+          <span id="micGainText">100%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="panel">
+  <div class="card">
+    <div class="sentence-nav" id="sentenceNav">
+      <button class="small" id="prevSentence">&larr; Previous</button>
+      <button class="small" id="nextSentence">Next &rarr;</button>
+      <span class="mode">Sentence <span id="sentenceCounter">1 / 1</span></span>
+    </div>
+
+    <div class="current-box" id="currentBox">
+      Now reading: <span class="current-word-text" id="currentWordText">&mdash;</span>
+      <span class="mode" id="syncNote"></span>
+    </div>
+
+    <div id="reader" aria-label="clickable listening text"></div>
+
+    <div class="stats" id="stats"></div>
+    <p class="note">
+      Keyboard shortcuts: <span class="kbd">Space</span> play/pause uploaded audio,
+      <span class="kbd">Z</span> undo, <span class="kbd">C</span> clear marks.
+      Purple slashes are suggested chunks; red slashes are your marks.
+      If you replace the bundled WAV, highlighting will fall back to an estimated mode.
+    </p>
+    <textarea id="exportBox" readonly></textarea>
+  </div>
+</main>
+
+<script>
+const passageSegments = [[["Last month,", "our university library", "changed its opening hours."], ["At first,", "many students were unhappy", "because the library used to stay open", "until midnight,", "but now it closes at ten."], ["Some students said", "they needed a quiet place", "to study late at night,", "especially before exams."]], [["However,", "the library staff explained", "that very few students actually used the building", "after ten thirty."], ["Most of the lights, heating, and security services", "had to stay on", "for only a small number of people."], ["The cost", "was much higher", "than the benefit."]], [["Instead of keeping the whole library open,", "the university created", "a smaller study room", "near the main entrance."], ["It stays open until midnight", "and has desks, charging points,", "and a few computers."], ["Students can still study late,", "but the university does not have to operate", "the entire building."]], [["At first,", "some students complained", "that the new room was too small."], ["But after two weeks,", "many changed their minds."], ["They found that the room", "was easier to access,", "warmer,", "and less distracting", "than the large library."], ["The student union", "is now asking the university", "to add more seats", "and improve the Wi-Fi."]], [["The change shows", "that a policy may seem inconvenient at first,", "but if it is adjusted carefully,", "it can save money", "without taking away the service", "people really need."]]];
+const optimizedTimings = [[0,0.3],[0.3,0.62],[0.74,0.84],[0.84,1.36],[1.36,1.96],[1.96,2.42],[2.42,2.64],[2.64,2.9],[2.9,3.36],[4.1,4.2],[4.2,4.6],[4.84,5.04],[5.04,5.46],[5.46,5.62],[5.62,6.1],[6.1,6.48],[6.48,6.7],[6.7,7.02],[7.02,7.4],[7.4,7.56],[7.56,7.76],[7.76,8.02],[8.02,8.3],[8.3,8.7],[9.18,9.38],[9.38,9.66],[9.66,9.86],[9.86,10.16],[10.16,10.38],[10.38,10.62],[11.24,11.64],[11.64,12],[12,12.26],[12.26,12.44],[12.44,12.64],[12.64,12.84],[12.84,13.14],[13.14,13.46],[13.46,13.66],[13.66,13.9],[13.9,14.14],[14.14,14.28],[14.28,14.54],[14.94,15.34],[15.34,15.76],[15.76,16.24],[16.94,17.32],[17.56,17.66],[17.66,17.98],[17.98,18.4],[18.4,18.86],[18.86,19.14],[19.14,19.42],[19.42,19.72],[19.72,20.1],[20.1,20.56],[20.56,20.94],[20.94,21.1],[21.1,21.36],[21.36,21.72],[21.72,21.96],[21.96,22.28],[22.84,23.28],[23.28,23.42],[23.42,23.52],[23.52,23.82],[24.08,24.3],[24.42,24.54],[24.54,24.9],[24.9,25.5],[25.5,25.78],[25.78,25.96],[25.96,26.14],[26.14,26.4],[26.4,26.58],[26.58,26.8],[26.8,26.98],[26.98,27.2],[27.2,27.46],[27.46,27.66],[27.66,27.9],[27.9,28.7],[28.7,29.04],[29.04,29.2],[29.2,29.42],[29.42,29.74],[29.74,29.92],[29.92,30.04],[30.04,30.4],[31.58,31.84],[31.84,32.04],[32.04,32.32],[32.32,32.5],[32.5,32.68],[32.68,33.12],[33.12,33.46],[33.92,34.06],[34.06,34.52],[34.52,35.02],[35.02,35.2],[35.2,35.48],[35.48,35.88],[35.88,36.12],[36.12,36.32],[36.32,36.46],[36.46,36.64],[36.64,37.02],[37.8,37.96],[37.96,38.22],[38.22,38.5],[38.5,38.78],[38.78,39.12],[39.12,39.64],[39.64,39.88],[39.88,40.32],[40.5,40.74],[40.74,41.14],[41.22,41.32],[41.32,41.42],[41.42,41.54],[41.54,41.98],[42.84,43.12],[43.12,43.36],[43.36,43.58],[43.58,43.88],[43.88,44.22],[44.62,44.84],[44.84,44.98],[44.98,45.42],[45.42,45.61],[45.61,45.8],[45.8,45.96],[45.96,46.12],[46.12,46.46],[46.46,46.66],[46.66,46.98],[46.98,47.34],[48.16,48.42],[48.42,48.74],[48.86,49.04],[49.04,49.42],[49.42,49.88],[49.88,50.12],[50.12,50.24],[50.24,50.4],[50.4,50.6],[50.6,50.76],[50.76,50.92],[50.92,51.26],[51.7,52],[52,52.24],[52.24,52.5],[52.5,52.82],[53.2,53.44],[53.44,53.76],[53.76,53.92],[53.92,54.2],[54.2,55.04],[55.04,55.36],[55.36,55.52],[55.52,55.64],[55.64,55.84],[55.84,56.04],[56.04,56.34],[56.34,56.54],[56.54,56.98],[57.3,57.56],[57.84,57.98],[57.98,58.2],[58.2,58.7],[58.7,58.98],[58.98,59.1],[59.1,59.34],[59.34,59.78],[60.54,60.82],[60.82,61.06],[61.06,61.42],[61.42,61.6],[61.6,61.8],[61.8,62.12],[62.12,62.28],[62.28,62.74],[62.74,63.1],[63.1,63.28],[63.28,63.5],[63.5,63.8],[63.8,64.04],[64.04,64.32],[64.32,64.48],[64.66,64.84],[65.6,65.94],[65.94,66.22],[66.22,66.56],[66.56,66.76],[66.76,66.88],[66.88,67.2],[67.2,67.54],[67.54,67.82],[67.82,68.32],[68.32,68.58],[68.58,68.9],[69.26,69.5],[69.5,69.64],[69.64,69.74],[69.74,69.86],[69.86,70.18],[70.18,70.66],[71.04,71.22],[71.22,71.38],[71.38,71.62],[71.62,71.94],[71.94,72.24],[72.24,72.6],[72.6,72.84],[72.84,73],[73,73.26],[73.26,73.54],[73.54,73.82],[73.82,74.06]];
+const optimizedAudioDuration = 76.2;
+
+const reader = document.getElementById("reader");
+const stats = document.getElementById("stats");
+const exportBox = document.getElementById("exportBox");
+const audio = document.getElementById("audio");
+const audioFile = document.getElementById("audioFile");
+const shadowBtn = document.getElementById("shadowBtn");
+const recordStatus = document.getElementById("recordStatus");
+const downloadRow = document.getElementById("downloadRow");
+const downloadMixed = document.getElementById("downloadMixed");
+const downloadMicOnly = document.getElementById("downloadMicOnly");
+const currentBox = document.getElementById("currentBox");
+const currentWordText = document.getElementById("currentWordText");
+const syncNote = document.getElementById("syncNote");
+const viewModeSelect = document.getElementById("viewMode");
+const sentenceNav = document.getElementById("sentenceNav");
+const sentenceCounter = document.getElementById("sentenceCounter");
+const playSentenceBtn = document.getElementById("playSentence");
+const playNextSentenceBtn = document.getElementById("playNextSentence");
+const prevSentenceBtn = document.getElementById("prevSentence");
+const nextSentenceBtn = document.getElementById("nextSentence");
+const autoSaveRecordings = document.getElementById("autoSaveRecordings");
+
+let tokens = [];
+let userBreaks = new Set();
+let suggestedBreaks = new Set();
+let undoStack = [];
+let showingSuggested = false;
+let speaking = false;
+var currentSentenceIndex = 0;
+var focusSentenceIndex = 0;
+var sentenceItems = [];
+var viewMode = "full";
+let currentHighlightedToken = null;
+let syncAnimation = null;
+let externalAudioMode = false;
+let activeTimings = optimizedTimings;
+let activeTimingSource = "embedded faster-whisper word timing";
+
+let audioContext = null;
+let sourceNode = null;
+let playbackGainNode = null;
+let capturedAudioStream = null;
+let capturedSourceNode = null;
+let micStream = null;
+let micNode = null;
+let destination = null;
+let originalGainNode = null;
+let micGainNode = null;
+let mixedRecorder = null;
+let micOnlyRecorder = null;
+let mixedChunks = [];
+let micOnlyChunks = [];
+let recording = false;
+let playbackOnlyShadowing = false;
+let autoDownloadDone = false;
+var sentencePlaybackActive = false;
+var sentenceStopTime = null;
+window.sentenceState = { index: 0, busy: false };
+
+function tokenizeSegment(segment) {
+  return segment.trim().split(/\s+/).filter(Boolean);
+}
+
+function sentenceText(sentence) {
+  return sentence.map(seg => seg).join(" ");
+}
+
+function buildTokens() {
+  tokens = [];
+  suggestedBreaks = new Set();
+  let id = 0;
+  passageSegments.forEach((paragraph, pIndex) => {
+    paragraph.forEach((sentence, sIndex) => {
+      sentence.forEach((segment, segIndex) => {
+        const words = tokenizeSegment(segment);
+        words.forEach((word, wIndex) => {
+          tokens.push({
+            id,
+            text: word,
+            pIndex,
+            sIndex,
+            segIndex,
+            isSentenceEnd: (segIndex === sentence.length - 1 && wIndex === words.length - 1)
+          });
+          id++;
+        });
+        suggestedBreaks.add(id - 1);
+      });
+    });
+  });
+  sentenceItems = collectSentences();
+}
+
+function collectSentences() {
+  const list = [];
+  passageSegments.forEach((paragraph, pIndex) => {
+    paragraph.forEach((sentence, sIndex) => {
+      const tokenIds = tokens
+        .filter(tok => tok.pIndex === pIndex && tok.sIndex === sIndex)
+        .map(tok => tok.id);
+      list.push({ text: sentenceText(sentence), pIndex, sIndex, tokenIds });
+    });
+  });
+  return list;
+}
+
+function visibleToken(tok) {
+  if (viewMode === "hide") return false;
+  if (viewMode !== "short") return true;
+  const item = sentenceItems[focusSentenceIndex];
+  return item && tok.pIndex === item.pIndex && tok.sIndex === item.sIndex;
+}
+
+function render() {
+  reader.innerHTML = "";
+  reader.classList.toggle("hidden", viewMode === "hide");
+  sentenceNav.classList.toggle("show", viewMode === "short");
+  currentBox.classList.toggle("show", viewMode === "hide");
+
+  if (viewMode === "hide") {
+    refreshMarks();
+    updateSentenceCounter();
+    return;
+  }
+
+  let lastP = -1;
+  const visible = tokens.filter(visibleToken);
+
+  visible.forEach((tok) => {
+    if (tok.pIndex !== lastP) {
+      const para = document.createElement("p");
+      para.className = "para";
+      para.dataset.p = tok.pIndex;
+      reader.appendChild(para);
+      lastP = tok.pIndex;
+    }
+
+    const para = reader.querySelector(`.para[data-p="${tok.pIndex}"]`);
+
+    const word = document.createElement("span");
+    word.className = "word";
+    word.textContent = tok.text;
+    word.dataset.id = tok.id;
+    word.title = "Click to toggle a chunk mark after this word";
+    word.addEventListener("click", () => toggleBreak(tok.id));
+    para.appendChild(word);
+
+    const slash = document.createElement("span");
+    slash.className = "slash";
+    slash.textContent = "/";
+    slash.dataset.after = tok.id;
+    slash.title = "Click to toggle a chunk mark between these words";
+    slash.addEventListener("click", () => toggleBreak(tok.id));
+    para.appendChild(slash);
+
+    para.appendChild(document.createTextNode(" "));
+
+    if (tok.isSentenceEnd) {
+      para.appendChild(document.createElement("br"));
+    }
+  });
+
+  refreshMarks();
+  updateSentenceCounter();
+
+  if (currentHighlightedToken !== null) {
+    applyHighlight(currentHighlightedToken, false);
+  }
+}
+
+function updateSentenceCounter() {
+  if (!sentenceItems.length) {
+    sentenceCounter.textContent = "0 / 0";
+    return;
+  }
+  sentenceCounter.textContent = `${focusSentenceIndex + 1} / ${sentenceItems.length}`;
+}
+
+function refreshMarks() {
+  document.querySelectorAll(".slash").forEach(el => {
+    const id = Number(el.dataset.after);
+    el.className = "slash";
+    if (userBreaks.has(id)) el.classList.add("on");
+    else if (showingSuggested && suggestedBreaks.has(id)) el.classList.add("suggested");
+  });
+  const count = userBreaks.size;
+  stats.textContent = `${count} chunk mark${count === 1 ? "" : "s"} placed.`;
+}
+
+function toggleBreak(id) {
+  if (userBreaks.has(id)) {
+    userBreaks.delete(id);
+    undoStack.push({type: "delete", id});
+  } else {
+    userBreaks.add(id);
+    undoStack.push({type: "add", id});
+  }
+  refreshMarks();
+}
+
+function undo() {
+  const last = undoStack.pop();
+  if (!last) return;
+  if (last.type === "add") userBreaks.delete(last.id);
+  if (last.type === "delete") userBreaks.add(last.id);
+  if (last.type === "bulk") userBreaks = new Set(last.ids);
+  refreshMarks();
+}
+
+function clearMarks() {
+  if (!userBreaks.size) return;
+  undoStack.push({type: "bulk", ids: Array.from(userBreaks)});
+  userBreaks.clear();
+  refreshMarks();
+}
+
+function findSentenceIndexByTokenId(tokenId) {
+  const tok = tokens[tokenId];
+  if (!tok) return 0;
+  return Math.max(0, sentenceItems.findIndex(item => item.pIndex === tok.pIndex && item.sIndex === tok.sIndex));
+}
+
+function applyHighlight(tokenId, scroll = true) {
+  currentHighlightedToken = tokenId;
+  const tok = tokens[tokenId];
+  if (!tok) return;
+
+  currentWordText.textContent = tok.text;
+
+  const sentenceIndex = findSentenceIndexByTokenId(tokenId);
+  if (sentenceIndex !== -1 && sentenceIndex !== focusSentenceIndex && viewMode === "short") {
+    focusSentenceIndex = sentenceIndex;
+    render();
+  }
+
+  document.querySelectorAll(".word").forEach(el => el.classList.remove("current"));
+  const el = document.querySelector(`.word[data-id="${tokenId}"]`);
+  if (el) {
+    el.classList.add("current");
+    if (scroll) el.scrollIntoView({block: "center", inline: "nearest", behavior: "smooth"});
+  }
+}
+
+function clearHighlight() {
+  currentHighlightedToken = null;
+  currentWordText.textContent = "-";
+  document.querySelectorAll(".word").forEach(el => el.classList.remove("current"));
+}
+
+function buildRangesForSentence(item) {
+  const ranges = [];
+  const matches = Array.from(item.text.matchAll(/\S+/g));
+  matches.forEach((m, idx) => {
+    if (idx < item.tokenIds.length) {
+      ranges.push({
+        tokenId: item.tokenIds[idx],
+        start: m.index,
+        end: m.index + m[0].length
+      });
+    }
+  });
+  return ranges;
+}
+
+function tokenFromCharIndex(charIndex, ranges) {
+  if (!ranges.length) return null;
+  let current = ranges[0].tokenId;
+  for (const r of ranges) {
+    if (charIndex >= r.start) current = r.tokenId;
+    if (charIndex >= r.start && charIndex < r.end) return r.tokenId;
+  }
+  return current;
+}
+
+function readAloud(startIndex = null) {
+  if (!("speechSynthesis" in window)) {
+    alert("Your browser does not support built-in speech synthesis. Please upload an audio file instead.");
+    return;
+  }
+
+  stopUploadedAudio();
+  window.speechSynthesis.cancel();
+
+  const sentences = sentenceItems;
+  currentSentenceIndex = startIndex !== null ? startIndex : (viewMode === "short" ? focusSentenceIndex : 0);
+  speaking = true;
+  syncNote.textContent = "(exact TTS word boundary)";
+
+  function speakNext() {
+    if (!speaking || currentSentenceIndex >= sentences.length) {
+      speaking = false;
+      clearHighlight();
+      return;
+    }
+
+    const item = sentences[currentSentenceIndex];
+    focusSentenceIndex = currentSentenceIndex;
+    if (viewMode === "short") render();
+
+    const ranges = buildRangesForSentence(item);
+    if (item.tokenIds.length) applyHighlight(item.tokenIds[0]);
+
+    const u = new SpeechSynthesisUtterance(item.text);
+    u.lang = "en-US";
+    u.rate = Number(document.getElementById("rate").value);
+    u.pitch = 1;
+
+    u.onboundary = (event) => {
+      if (typeof event.charIndex === "number") {
+        const tokenId = tokenFromCharIndex(event.charIndex, ranges);
+        if (tokenId !== null) applyHighlight(tokenId);
+      }
+    };
+
+    u.onend = () => {
+      currentSentenceIndex++;
+      setTimeout(speakNext, 450);
+    };
+
+    u.onerror = () => {
+      currentSentenceIndex++;
+      setTimeout(speakNext, 300);
+    };
+
+    window.speechSynthesis.speak(u);
+  }
+
+  speakNext();
+}
+
+function pauseSpeechOrAudio() {
+  if (audio.src && !audio.paused) {
+    audio.pause();
+    return;
+  }
+  if (audio.src && audio.paused && !speaking) {
+    audio.play();
+    return;
+  }
+  if ("speechSynthesis" in window) {
+    if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) window.speechSynthesis.pause();
+    else if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+  }
+}
+
+function stopSpeech() {
+  speaking = false;
+  stopSentencePlayback();
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  stopUploadedAudio();
+  clearHighlight();
+}
+
+function stopUploadedAudio() {
+  if (!audio.paused) audio.pause();
+}
+
+function exportChunks() {
+  let output = "";
+  let lastP = -1;
+  tokens.forEach(tok => {
+    if (tok.pIndex !== lastP) {
+      if (output) output += "\n\n";
+      lastP = tok.pIndex;
+    }
+    output += tok.text;
+    if (userBreaks.has(tok.id)) output += " /";
+    output += " ";
+  });
+  exportBox.style.display = "block";
+  exportBox.value = output.trim();
+  exportBox.focus();
+  exportBox.select();
+}
+
+function useOptimizedTiming() {
+  return Array.isArray(activeTimings) && activeTimings.length === tokens.length;
+}
+
+function tokenForOptimizedTime(t) {
+  let lo = 0;
+  let hi = activeTimings.length - 1;
+  if (t <= activeTimings[0][0]) return 0;
+  if (t >= activeTimings[activeTimings.length - 1][1]) return activeTimings.length - 1;
+
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const start = activeTimings[mid][0];
+    const end = activeTimings[mid][1];
+    if (t < start) hi = mid - 1;
+    else if (t > end) lo = mid + 1;
+    else return mid;
+  }
+
+  return Math.max(0, Math.min(activeTimings.length - 1, hi));
+}
+
+function tokenForUniformTime(t) {
+  if (!audio.duration || Number.isNaN(audio.duration)) return 0;
+  const ratio = Math.min(0.999, Math.max(0, t / audio.duration));
+  return Math.min(tokens.length - 1, Math.floor(ratio * tokens.length));
+}
+
+function syncAudioHighlightLoop() {
+  if (!audio.paused && !audio.ended) {
+    const tokenId = useOptimizedTiming()
+      ? tokenForOptimizedTime(audio.currentTime)
+      : tokenForUniformTime(audio.currentTime);
+
+    syncNote.textContent = useOptimizedTiming()
+      ? `(${activeTimingSource})`
+      : "(estimated timing)";
+
+    applyHighlight(tokenId, false);
+    if (sentencePlaybackActive && sentenceStopTime !== null && audio.currentTime >= sentenceStopTime) {
+      audio.pause();
+      sentenceStopTime = null;
+      recordStatus.textContent = "Sentence finished. Click Next to play the next sentence.";
+      playSentenceBtn.textContent = "Replay sentence (R)";
+      return;
+    }
+    syncAnimation = requestAnimationFrame(syncAudioHighlightLoop);
+  }
+}
+
+function sentenceTimeRange(index) {
+  const item = sentenceItems[index];
+  if (!item || !item.tokenIds.length || !useOptimizedTiming()) return null;
+  const first = item.tokenIds[0];
+  const last = item.tokenIds[item.tokenIds.length - 1];
+  return {
+    start: activeTimings[first][0],
+    end: activeTimings[last][1],
+    first,
+    last
+  };
+}
+
+async function playFocusedSentence() {
+  focusSentenceIndex = window.sentenceState.index;
+  const range = sentenceTimeRange(focusSentenceIndex);
+  if (!range) {
+    recordStatus.textContent = "Sentence playback needs word timing for this audio.";
+    return;
+  }
+  sentencePlaybackActive = true;
+  viewMode = "short";
+  viewModeSelect.value = "short";
+  render();
+  stopSpeechOnly();
+  audio.pause();
+  audio.currentTime = Math.max(0, range.start);
+  sentenceStopTime = range.end + 0.04;
+  applyHighlight(range.first);
+  await audio.play();
+  playSentenceBtn.textContent = "Replay sentence (R)";
+  recordStatus.textContent = "Playing one sentence. Click Next after it stops.";
+}
+
+function stopSentencePlayback() {
+  sentencePlaybackActive = false;
+  sentenceStopTime = null;
+  playSentenceBtn.textContent = "Replay sentence (R)";
+}
+
+function stopSpeechOnly() {
+  speaking = false;
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
+function goToSentence(index, shouldPlay = false) {
+  window.sentenceState.index = Math.max(0, Math.min(sentenceItems.length - 1, index));
+  focusSentenceIndex = window.sentenceState.index;
+  render();
+  if (shouldPlay) playFocusedSentence();
+}
+
+function stepSentence(delta) {
+  if (window.sentenceState.busy) return;
+  window.sentenceState.busy = true;
+  sentencePlaybackActive = true;
+  goToSentence(window.sentenceState.index + delta, true);
+  setTimeout(() => { window.sentenceState.busy = false; }, 350);
+}
+
+async function loadBundledWhisperTimings() {
+  try {
+    const response = await fetch("optimized_timings_whisper.json", { cache: "no-store" });
+    if (!response.ok) throw new Error("timing json not found");
+    const data = await response.json();
+    if (Array.isArray(data.timings) && data.timings.length === tokens.length) {
+      activeTimings = data.timings;
+      activeTimingSource = "faster-whisper word timing";
+      recordStatus.textContent = "Bundled audio ready. Highlighting uses faster-whisper word timing.";
+    }
+  } catch {
+    activeTimings = optimizedTimings;
+    activeTimingSource = "embedded faster-whisper word timing";
+  }
+}
+
+async function requestWhisperTimings(file) {
+  const form = new FormData();
+  form.append("audio", file);
+  form.append("tokens", JSON.stringify(tokens.map(tok => tok.text)));
+
+  const response = await fetch("/api/transcribe-align", {
+    method: "POST",
+    body: form
+  });
+  if (!response.ok) throw new Error(await response.text());
+  const data = await response.json();
+  if (!Array.isArray(data.timings) || data.timings.length !== tokens.length) {
+    throw new Error("The local Whisper service returned an invalid timing map.");
+  }
+  return data.timings;
+}
+
+audio.addEventListener("play", () => {
+  speaking = false;
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  if (syncAnimation) cancelAnimationFrame(syncAnimation);
+  syncAudioHighlightLoop();
+});
+
+audio.addEventListener("pause", () => {
+  if (syncAnimation) cancelAnimationFrame(syncAnimation);
+});
+
+audio.addEventListener("ended", () => {
+  if (recording) stopShadowingRecording();
+  if (syncAnimation) cancelAnimationFrame(syncAnimation);
+  clearHighlight();
+});
+
+function getSupportedMimeType() {
+  const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  return types.find(type => MediaRecorder.isTypeSupported(type)) || "";
+}
+
+function refreshDownloadReadyStatus() {
+  if (downloadMixed.href && downloadMicOnly.href) {
+    downloadRow.style.display = "flex";
+    recordStatus.textContent = "Recording finished. Download links are ready.";
+    autoSaveRecordingFiles();
+  }
+}
+
+function autoSaveRecordingFiles() {
+  if (autoDownloadDone || !autoSaveRecordings.checked) return;
+  autoDownloadDone = true;
+  setTimeout(() => downloadMixed.click(), 80);
+  setTimeout(() => downloadMicOnly.click(), 280);
+}
+
+async function prepareAudioContext() {
+  if (!audioContext) audioContext = new AudioContext();
+  if (audioContext.state === "suspended") await audioContext.resume();
+
+  if (!sourceNode) {
+    sourceNode = audioContext.createMediaElementSource(audio);
+  }
+
+  if (!playbackGainNode) {
+    playbackGainNode = audioContext.createGain();
+    playbackGainNode.gain.value = 1;
+    sourceNode.connect(playbackGainNode);
+    playbackGainNode.connect(audioContext.destination);
+  }
+}
+
+function getCapturedAudioStream() {
+  const capture = audio.captureStream || audio.mozCaptureStream;
+  if (!capture) return null;
+  if (!capturedAudioStream) capturedAudioStream = capture.call(audio);
+  return capturedAudioStream;
+}
+
+function seekAudio(time) {
+  return new Promise(resolve => {
+    const finish = () => {
+      audio.removeEventListener("seeked", finish);
+      resolve();
+    };
+    audio.addEventListener("seeked", finish, { once: true });
+    audio.currentTime = time;
+    setTimeout(finish, 250);
+  });
+}
+
+async function startShadowingRecording() {
+  if (!audio.src) {
+    alert("Please upload an audio file first. Shadowing recording needs source audio.");
+    return;
+  }
+
+  try {
+    speaking = false;
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    if (!audio.paused) audio.pause();
+    clearHighlight();
+    downloadRow.style.display = "none";
+    downloadMixed.removeAttribute("href");
+    downloadMicOnly.removeAttribute("href");
+    downloadMixed.textContent = "Preparing mixed audio...";
+    downloadMicOnly.textContent = "Preparing mic-only audio...";
+    mixedChunks = [];
+    micOnlyChunks = [];
+    autoDownloadDone = false;
+    stopSentencePlayback();
+
+    audio.pause();
+    audio.currentTime = 0;
+    audio.muted = false;
+    audio.volume = 1;
+    await audio.play();
+    recording = true;
+    shadowBtn.textContent = "■ Stop shadowing";
+    shadowBtn.classList.remove("ok");
+    shadowBtn.classList.add("danger");
+    playbackOnlyShadowing = location.protocol === "file:";
+
+    if (playbackOnlyShadowing) {
+      recordStatus.textContent = "Shadowing playback started. Microphone recording is available from localhost.";
+      return;
+    }
+
+    recordStatus.textContent = "Shadowing started: source audio is playing. Preparing microphone recording...";
+
+    await prepareAudioContext();
+
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
+
+    micNode = audioContext.createMediaStreamSource(micStream);
+    const mixedDestination = audioContext.createMediaStreamDestination();
+
+    originalGainNode = audioContext.createGain();
+    micGainNode = audioContext.createGain();
+
+    originalGainNode.gain.value = Number(document.getElementById("bgGain").value) / 100;
+    micGainNode.gain.value = Number(document.getElementById("micGain").value) / 100;
+
+    sourceNode.connect(originalGainNode);
+    originalGainNode.connect(mixedDestination);
+    micNode.connect(micGainNode);
+    micGainNode.connect(mixedDestination);
+    destination = mixedDestination.stream;
+
+    const mimeType = getSupportedMimeType();
+    const options = mimeType ? { mimeType } : undefined;
+
+    mixedRecorder = new MediaRecorder(destination, options);
+    micOnlyRecorder = new MediaRecorder(micStream, options);
+
+    mixedRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) mixedChunks.push(event.data);
+    };
+    micOnlyRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) micOnlyChunks.push(event.data);
+    };
+
+    mixedRecorder.onstop = () => {
+      const blob = new Blob(mixedChunks, { type: mixedRecorder.mimeType || "audio/webm" });
+      downloadMixed.href = URL.createObjectURL(blob);
+      downloadMixed.textContent = "Download mixed audio";
+      refreshDownloadReadyStatus();
+    };
+    micOnlyRecorder.onstop = () => {
+      const blob = new Blob(micOnlyChunks, { type: micOnlyRecorder.mimeType || "audio/webm" });
+      downloadMicOnly.href = URL.createObjectURL(blob);
+      downloadMicOnly.textContent = "Download mic-only audio";
+      downloadRow.style.display = "flex";
+      refreshDownloadReadyStatus();
+    };
+
+    mixedRecorder.start();
+    micOnlyRecorder.start();
+
+    recordStatus.textContent = "Recording shadowing: source audio is playing and your microphone is recording.";
+
+  } catch (error) {
+    console.error(error);
+    recordStatus.textContent = audio.paused
+      ? "Could not start shadowing. Check microphone permission and use HTTPS or localhost."
+      : "Source audio is playing, but microphone recording could not start. Check microphone permission.";
+    cleanupRecordingGraph();
+  }
+}
+
+function stopShadowingRecording() {
+  const wasPlaybackOnly = playbackOnlyShadowing;
+  if (!wasPlaybackOnly && (mixedRecorder || micOnlyRecorder)) {
+    downloadRow.style.display = "flex";
+    recordStatus.textContent = "Recording stopped. Preparing download links...";
+  }
+
+  if (mixedRecorder && mixedRecorder.state !== "inactive") mixedRecorder.stop();
+  if (micOnlyRecorder && micOnlyRecorder.state !== "inactive") micOnlyRecorder.stop();
+  if (!audio.paused) audio.pause();
+
+  cleanupRecordingGraph();
+
+  recording = false;
+  playbackOnlyShadowing = false;
+  shadowBtn.textContent = "● Start shadowing";
+  shadowBtn.classList.add("ok");
+  shadowBtn.classList.remove("danger");
+  if (wasPlaybackOnly) {
+    recordStatus.textContent = "Shadowing playback stopped. Open through localhost to record microphone audio.";
+  } else if (!mixedRecorder && !micOnlyRecorder) {
+    recordStatus.textContent = "Shadowing stopped before recording started.";
+  }
+}
+
+function cleanupRecordingGraph() {
+  try { if (sourceNode && originalGainNode) sourceNode.disconnect(originalGainNode); } catch {}
+  try { if (capturedSourceNode) capturedSourceNode.disconnect(); } catch {}
+  try { if (originalGainNode) originalGainNode.disconnect(); } catch {}
+  try { if (micNode) micNode.disconnect(); } catch {}
+  try { if (micGainNode) micGainNode.disconnect(); } catch {}
+
+  if (micStream) {
+    micStream.getTracks().forEach(track => track.stop());
+    micStream = null;
+  }
+
+  micNode = null;
+  capturedSourceNode = null;
+  destination = null;
+  originalGainNode = null;
+  micGainNode = null;
+}
+
+document.getElementById("speakBtn").addEventListener("click", () => readAloud());
+document.getElementById("pauseBtn").addEventListener("click", pauseSpeechOrAudio);
+document.getElementById("stopBtn").addEventListener("click", stopSpeech);
+document.getElementById("clearBtn").addEventListener("click", clearMarks);
+document.getElementById("undoBtn").addEventListener("click", undo);
+document.getElementById("suggestBtn").addEventListener("click", () => {
+  showingSuggested = !showingSuggested;
+  document.getElementById("suggestBtn").textContent = showingSuggested ? "Hide suggested chunks" : "Show suggested chunks";
+  refreshMarks();
+});
+document.getElementById("exportBtn").addEventListener("click", exportChunks);
+
+document.getElementById("rate").addEventListener("input", (e) => {
+  document.getElementById("rateText").textContent = Number(e.target.value).toFixed(2) + "x";
+});
+
+document.getElementById("bgGain").addEventListener("input", (e) => {
+  document.getElementById("bgGainText").textContent = e.target.value + "%";
+  if (originalGainNode) originalGainNode.gain.value = Number(e.target.value) / 100;
+});
+
+document.getElementById("micGain").addEventListener("input", (e) => {
+  document.getElementById("micGainText").textContent = e.target.value + "%";
+  if (micGainNode) micGainNode.gain.value = Number(e.target.value) / 100;
+});
+
+audioFile.addEventListener("change", () => {
+  const file = audioFile.files && audioFile.files[0];
+  if (!file) return;
+  audio.src = URL.createObjectURL(file);
+  audio.load();
+  externalAudioMode = true;
+  activeTimings = null;
+  activeTimingSource = "estimated timing";
+  shadowBtn.disabled = false;
+  recordStatus.textContent = "Audio loaded. Generating word timing with local Whisper service...";
+  requestWhisperTimings(file)
+    .then(timings => {
+      activeTimings = timings;
+      activeTimingSource = "local faster-whisper word timing";
+      recordStatus.textContent = "Audio ready. Highlighting uses local faster-whisper word timing.";
+    })
+    .catch(error => {
+      console.warn(error);
+      activeTimings = null;
+      activeTimingSource = "estimated timing";
+      recordStatus.textContent = "Audio ready. Local Whisper timing service is unavailable, so highlighting uses estimated timing.";
+    });
+});
+
+shadowBtn.addEventListener("click", () => {
+  if (recording) stopShadowingRecording();
+  else startShadowingRecording();
+});
+
+viewModeSelect.addEventListener("change", (e) => {
+  viewMode = e.target.value;
+  if (viewMode !== "short") stopSentencePlayback();
+  render();
+});
+
+playSentenceBtn.addEventListener("click", () => {
+  playFocusedSentence();
+});
+
+playNextSentenceBtn.addEventListener("click", () => {
+  stepSentence(1);
+});
+
+document.addEventListener("pointerdown", (e) => {
+  const navButton = e.target.closest && e.target.closest("#prevSentence, #nextSentence");
+  if (!navButton) return;
+  e.preventDefault();
+  stepSentence(navButton.id === "nextSentence" ? 1 : -1);
+}, true);
+
+document.addEventListener("keydown", (e) => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") return;
+  if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    stepSentence(-1);
+    return;
+  }
+  if (e.key === "ArrowRight") {
+    e.preventDefault();
+    stepSentence(1);
+    return;
+  }
+  if (e.key.toLowerCase() === "r") {
+    e.preventDefault();
+    playFocusedSentence();
+    return;
+  }
+  if (e.code === "Space") {
+    e.preventDefault();
+    if (audio.src) {
+      if (audio.paused) audio.play();
+      else audio.pause();
+    } else {
+      pauseSpeechOrAudio();
+    }
+  }
+  if (e.key.toLowerCase() === "z") undo();
+  if (e.key.toLowerCase() === "c") clearMarks();
+});
+
+audio.addEventListener("loadedmetadata", () => {
+  shadowBtn.disabled = false;
+  if (useOptimizedTiming()) {
+    recordStatus.textContent = `Audio ready. Highlighting uses ${activeTimingSource}.`;
+  } else {
+    recordStatus.textContent = "Audio ready. Highlighting uses estimated timing until local Whisper timing is available.";
+  }
+});
+
+buildTokens();
+render();
+loadBundledWhisperTimings();
+</script>
+</body>
+</html>
+
