@@ -360,14 +360,14 @@
       Keyboard shortcuts: <span class="kbd">Space</span> play/pause uploaded audio,
       <span class="kbd">Z</span> undo, <span class="kbd">C</span> clear marks.
       Purple slashes are suggested chunks; red slashes are your marks.
-      If you replace the bundled WAV, highlighting will fall back to an estimated mode.
+      From localhost, uploaded audio is transcribed locally and highlighted with faster-whisper word timing.
     </p>
     <textarea id="exportBox" readonly></textarea>
   </div>
 </main>
 
 <script>
-const passageSegments = [[["Last month,", "our university library", "changed its opening hours."], ["At first,", "many students were unhappy", "because the library used to stay open", "until midnight,", "but now it closes at ten."], ["Some students said", "they needed a quiet place", "to study late at night,", "especially before exams."]], [["However,", "the library staff explained", "that very few students actually used the building", "after ten thirty."], ["Most of the lights, heating, and security services", "had to stay on", "for only a small number of people."], ["The cost", "was much higher", "than the benefit."]], [["Instead of keeping the whole library open,", "the university created", "a smaller study room", "near the main entrance."], ["It stays open until midnight", "and has desks, charging points,", "and a few computers."], ["Students can still study late,", "but the university does not have to operate", "the entire building."]], [["At first,", "some students complained", "that the new room was too small."], ["But after two weeks,", "many changed their minds."], ["They found that the room", "was easier to access,", "warmer,", "and less distracting", "than the large library."], ["The student union", "is now asking the university", "to add more seats", "and improve the Wi-Fi."]], [["The change shows", "that a policy may seem inconvenient at first,", "but if it is adjusted carefully,", "it can save money", "without taking away the service", "people really need."]]];
+let passageSegments = [[["Last month,", "our university library", "changed its opening hours."], ["At first,", "many students were unhappy", "because the library used to stay open", "until midnight,", "but now it closes at ten."], ["Some students said", "they needed a quiet place", "to study late at night,", "especially before exams."]], [["However,", "the library staff explained", "that very few students actually used the building", "after ten thirty."], ["Most of the lights, heating, and security services", "had to stay on", "for only a small number of people."], ["The cost", "was much higher", "than the benefit."]], [["Instead of keeping the whole library open,", "the university created", "a smaller study room", "near the main entrance."], ["It stays open until midnight", "and has desks, charging points,", "and a few computers."], ["Students can still study late,", "but the university does not have to operate", "the entire building."]], [["At first,", "some students complained", "that the new room was too small."], ["But after two weeks,", "many changed their minds."], ["They found that the room", "was easier to access,", "warmer,", "and less distracting", "than the large library."], ["The student union", "is now asking the university", "to add more seats", "and improve the Wi-Fi."]], [["The change shows", "that a policy may seem inconvenient at first,", "but if it is adjusted carefully,", "it can save money", "without taking away the service", "people really need."]]];
 const optimizedTimings = [[0,0.3],[0.3,0.62],[0.74,0.84],[0.84,1.36],[1.36,1.96],[1.96,2.42],[2.42,2.64],[2.64,2.9],[2.9,3.36],[4.1,4.2],[4.2,4.6],[4.84,5.04],[5.04,5.46],[5.46,5.62],[5.62,6.1],[6.1,6.48],[6.48,6.7],[6.7,7.02],[7.02,7.4],[7.4,7.56],[7.56,7.76],[7.76,8.02],[8.02,8.3],[8.3,8.7],[9.18,9.38],[9.38,9.66],[9.66,9.86],[9.86,10.16],[10.16,10.38],[10.38,10.62],[11.24,11.64],[11.64,12],[12,12.26],[12.26,12.44],[12.44,12.64],[12.64,12.84],[12.84,13.14],[13.14,13.46],[13.46,13.66],[13.66,13.9],[13.9,14.14],[14.14,14.28],[14.28,14.54],[14.94,15.34],[15.34,15.76],[15.76,16.24],[16.94,17.32],[17.56,17.66],[17.66,17.98],[17.98,18.4],[18.4,18.86],[18.86,19.14],[19.14,19.42],[19.42,19.72],[19.72,20.1],[20.1,20.56],[20.56,20.94],[20.94,21.1],[21.1,21.36],[21.36,21.72],[21.72,21.96],[21.96,22.28],[22.84,23.28],[23.28,23.42],[23.42,23.52],[23.52,23.82],[24.08,24.3],[24.42,24.54],[24.54,24.9],[24.9,25.5],[25.5,25.78],[25.78,25.96],[25.96,26.14],[26.14,26.4],[26.4,26.58],[26.58,26.8],[26.8,26.98],[26.98,27.2],[27.2,27.46],[27.46,27.66],[27.66,27.9],[27.9,28.7],[28.7,29.04],[29.04,29.2],[29.2,29.42],[29.42,29.74],[29.74,29.92],[29.92,30.04],[30.04,30.4],[31.58,31.84],[31.84,32.04],[32.04,32.32],[32.32,32.5],[32.5,32.68],[32.68,33.12],[33.12,33.46],[33.92,34.06],[34.06,34.52],[34.52,35.02],[35.02,35.2],[35.2,35.48],[35.48,35.88],[35.88,36.12],[36.12,36.32],[36.32,36.46],[36.46,36.64],[36.64,37.02],[37.8,37.96],[37.96,38.22],[38.22,38.5],[38.5,38.78],[38.78,39.12],[39.12,39.64],[39.64,39.88],[39.88,40.32],[40.5,40.74],[40.74,41.14],[41.22,41.32],[41.32,41.42],[41.42,41.54],[41.54,41.98],[42.84,43.12],[43.12,43.36],[43.36,43.58],[43.58,43.88],[43.88,44.22],[44.62,44.84],[44.84,44.98],[44.98,45.42],[45.42,45.61],[45.61,45.8],[45.8,45.96],[45.96,46.12],[46.12,46.46],[46.46,46.66],[46.66,46.98],[46.98,47.34],[48.16,48.42],[48.42,48.74],[48.86,49.04],[49.04,49.42],[49.42,49.88],[49.88,50.12],[50.12,50.24],[50.24,50.4],[50.4,50.6],[50.6,50.76],[50.76,50.92],[50.92,51.26],[51.7,52],[52,52.24],[52.24,52.5],[52.5,52.82],[53.2,53.44],[53.44,53.76],[53.76,53.92],[53.92,54.2],[54.2,55.04],[55.04,55.36],[55.36,55.52],[55.52,55.64],[55.64,55.84],[55.84,56.04],[56.04,56.34],[56.34,56.54],[56.54,56.98],[57.3,57.56],[57.84,57.98],[57.98,58.2],[58.2,58.7],[58.7,58.98],[58.98,59.1],[59.1,59.34],[59.34,59.78],[60.54,60.82],[60.82,61.06],[61.06,61.42],[61.42,61.6],[61.6,61.8],[61.8,62.12],[62.12,62.28],[62.28,62.74],[62.74,63.1],[63.1,63.28],[63.28,63.5],[63.5,63.8],[63.8,64.04],[64.04,64.32],[64.32,64.48],[64.66,64.84],[65.6,65.94],[65.94,66.22],[66.22,66.56],[66.56,66.76],[66.76,66.88],[66.88,67.2],[67.2,67.54],[67.54,67.82],[67.82,68.32],[68.32,68.58],[68.58,68.9],[69.26,69.5],[69.5,69.64],[69.64,69.74],[69.74,69.86],[69.86,70.18],[70.18,70.66],[71.04,71.22],[71.22,71.38],[71.38,71.62],[71.62,71.94],[71.94,72.24],[72.24,72.6],[72.6,72.84],[72.84,73],[73,73.26],[73.26,73.54],[73.54,73.82],[73.82,74.06]];
 const optimizedAudioDuration = 76.2;
 
@@ -408,6 +408,8 @@ let syncAnimation = null;
 let externalAudioMode = false;
 let activeTimings = optimizedTimings;
 let activeTimingSource = "embedded faster-whisper word timing";
+let transcriptionPending = false;
+let transcriptionRequestId = 0;
 
 let audioContext = null;
 let sourceNode = null;
@@ -476,6 +478,42 @@ function collectSentences() {
     });
   });
   return list;
+}
+
+function resetLessonStateForNewText() {
+  userBreaks = new Set();
+  suggestedBreaks = new Set();
+  undoStack = [];
+  showingSuggested = false;
+  currentHighlightedToken = null;
+  currentSentenceIndex = 0;
+  focusSentenceIndex = 0;
+  window.sentenceState = { index: 0, busy: false };
+  exportBox.style.display = "none";
+  document.getElementById("suggestBtn").textContent = "Show suggested chunks";
+  stopSentencePlayback();
+  clearHighlight();
+}
+
+function applyTranscribedAudio(data) {
+  if (!Array.isArray(data.passageSegments) || !data.passageSegments.length) {
+    throw new Error("The local Whisper service did not return recognized text.");
+  }
+  if (!Array.isArray(data.timings) || !data.timings.length) {
+    throw new Error("The local Whisper service did not return word timing.");
+  }
+
+  passageSegments = data.passageSegments;
+  resetLessonStateForNewText();
+  buildTokens();
+
+  if (data.timings.length !== tokens.length) {
+    throw new Error(`Whisper returned ${data.timings.length} timings for ${tokens.length} words.`);
+  }
+
+  activeTimings = data.timings;
+  activeTimingSource = "local faster-whisper transcript timing";
+  render();
 }
 
 function visibleToken(tok) {
@@ -879,10 +917,9 @@ async function loadBundledWhisperTimings() {
   }
 }
 
-async function requestWhisperTimings(file) {
+async function requestWhisperTranscript(file) {
   const form = new FormData();
   form.append("audio", file);
-  form.append("tokens", JSON.stringify(tokens.map(tok => tok.text)));
 
   const response = await fetch("/api/transcribe-align", {
     method: "POST",
@@ -890,10 +927,7 @@ async function requestWhisperTimings(file) {
   });
   if (!response.ok) throw new Error(await response.text());
   const data = await response.json();
-  if (!Array.isArray(data.timings) || data.timings.length !== tokens.length) {
-    throw new Error("The local Whisper service returned an invalid timing map.");
-  }
-  return data.timings;
+  return data;
 }
 
 audio.addEventListener("play", () => {
@@ -1203,24 +1237,29 @@ document.getElementById("micGain").addEventListener("input", (e) => {
 audioFile.addEventListener("change", () => {
   const file = audioFile.files && audioFile.files[0];
   if (!file) return;
+  const requestId = ++transcriptionRequestId;
   audio.src = URL.createObjectURL(file);
   audio.load();
   externalAudioMode = true;
   activeTimings = null;
   activeTimingSource = "estimated timing";
+  transcriptionPending = true;
   shadowBtn.disabled = false;
-  recordStatus.textContent = "Audio loaded. Generating word timing with local Whisper service...";
-  requestWhisperTimings(file)
-    .then(timings => {
-      activeTimings = timings;
-      activeTimingSource = "local faster-whisper word timing";
-      recordStatus.textContent = "Audio ready. Highlighting uses local faster-whisper word timing.";
+  recordStatus.textContent = "Audio loaded. Transcribing with local faster-whisper service...";
+  requestWhisperTranscript(file)
+    .then(data => {
+      if (requestId !== transcriptionRequestId) return;
+      applyTranscribedAudio(data);
+      transcriptionPending = false;
+      recordStatus.textContent = "Audio ready. Text and highlighting use local faster-whisper word timing.";
     })
     .catch(error => {
+      if (requestId !== transcriptionRequestId) return;
       console.warn(error);
+      transcriptionPending = false;
       activeTimings = null;
       activeTimingSource = "estimated timing";
-      recordStatus.textContent = "Audio ready. Local Whisper timing service is unavailable, so highlighting uses estimated timing.";
+      recordStatus.textContent = "Audio ready, but local transcription failed. Open through http://localhost:8000 and keep whisper_alignment_server.py running.";
     });
 });
 
@@ -1283,6 +1322,10 @@ document.addEventListener("keydown", (e) => {
 
 audio.addEventListener("loadedmetadata", () => {
   shadowBtn.disabled = false;
+  if (transcriptionPending) {
+    recordStatus.textContent = "Audio loaded. Transcribing with local faster-whisper service...";
+    return;
+  }
   if (useOptimizedTiming()) {
     recordStatus.textContent = `Audio ready. Highlighting uses ${activeTimingSource}.`;
   } else {

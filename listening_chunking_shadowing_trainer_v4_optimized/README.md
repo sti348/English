@@ -14,7 +14,8 @@ This version is optimized for the bundled WAV:
   - suggested chunks
   - export chunks
   - built-in read aloud
-  - uploaded audio playback
+- uploaded audio playback
+- automatic local transcription and word highlighting for uploaded audio
   - shadowing recording
   - mixed audio export
   - mic-only export
@@ -34,7 +35,7 @@ Recording auto-save is enabled by default from the localhost page. After you sto
 
 For microphone recording, some browsers require HTTPS or localhost.
 
-To use faster-whisper word timing for the bundled WAV and for newly uploaded audio, run the included local server:
+To use faster-whisper word timing for the bundled WAV and to automatically recognize text from newly uploaded audio, run the included local server:
 
 ```powershell
 D:\Programs\VideoCaptioner\runtime\python.exe whisper_alignment_server.py
@@ -48,7 +49,7 @@ Then open:
 http://localhost:8000/listening_chunking_shadowing_trainer_optimized.html
 ```
 
-Uploaded audio is sent only to this local server. The server uses:
+Uploaded audio is sent only to this local server. The page replaces the reading text with the recognized transcript and uses the returned word timestamps for real-time highlighting. The server uses:
 
 ```text
 D:\Programs\VideoCaptioner\AppData\models\faster-whisper-large-v2

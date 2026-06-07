@@ -42,6 +42,77 @@ def expand_whisper_word(word, start, end):
     return [{"word": raw, "start": start, "end": end}]
 
 
+def extract_whisper_words(whisper_data):
+    words = []
+    for segment in whisper_data.get("segments", []):
+        for item in segment.get("words", []):
+            raw = str(item.get("word", "")).strip()
+            if not raw:
+                continue
+            words.append(
+                {
+                    "word": re.sub(r"\s+", " ", raw),
+                    "start": round(float(item["start"]), 3),
+                    "end": round(float(item["end"]), 3),
+                }
+            )
+    return words
+
+
+def build_transcript_payload(whisper_data):
+    words = extract_whisper_words(whisper_data)
+    passage_segments = []
+    current_paragraph = []
+    current_sentence = []
+    last_end = None
+
+    def flush_sentence():
+        nonlocal current_sentence, current_paragraph
+        if not current_sentence:
+            return
+        chunks = []
+        for idx in range(0, len(current_sentence), 6):
+            chunks.append(" ".join(item["word"] for item in current_sentence[idx : idx + 6]))
+        current_paragraph.append(chunks)
+        current_sentence = []
+
+    def flush_paragraph():
+        nonlocal current_paragraph
+        flush_sentence()
+        if current_paragraph:
+            passage_segments.append(current_paragraph)
+            current_paragraph = []
+
+    for item in words:
+        gap = 0 if last_end is None else item["start"] - last_end
+        if current_sentence and gap > 1.8:
+            flush_sentence()
+        if current_paragraph and gap > 3.0:
+            flush_paragraph()
+
+        current_sentence.append(item)
+        last_end = item["end"]
+
+        sentence_text = item["word"].rstrip()
+        if re.search(r"[.!?][\"')\]]*$", sentence_text) and len(current_sentence) >= 3:
+            flush_sentence()
+            if len(current_paragraph) >= 4:
+                flush_paragraph()
+
+    flush_paragraph()
+
+    if not passage_segments and words:
+        passage_segments = [[[item["word"] for item in words]]]
+
+    transcript = " ".join(item["word"] for item in words)
+    return {
+        "passageSegments": passage_segments,
+        "timings": [[item["start"], item["end"]] for item in words],
+        "words": words,
+        "transcript": transcript,
+    }
+
+
 def parse_multipart(body, content_type):
     match = re.search(r"boundary=([^;]+)", content_type)
     if not match:
@@ -202,9 +273,11 @@ class Handler(SimpleHTTPRequestHandler):
             parts = parse_multipart(self.rfile.read(length), self.headers.get("Content-Type", ""))
             audio = parts.get("audio")
             token_part = parts.get("tokens")
-            if not audio or not token_part:
-                raise ValueError("Expected audio and tokens fields.")
-            target_tokens = json.loads(token_part["content"].decode("utf-8"))
+            if not audio:
+                raise ValueError("Expected audio field.")
+            target_tokens = None
+            if token_part:
+                target_tokens = json.loads(token_part["content"].decode("utf-8"))
 
             suffix = Path(audio["filename"] or "audio.wav").suffix or ".wav"
             with tempfile.TemporaryDirectory(prefix="shadowing_whisper_") as tmp:
@@ -212,10 +285,16 @@ class Handler(SimpleHTTPRequestHandler):
                 audio_path = tmp_path / f"upload{suffix}"
                 audio_path.write_bytes(audio["content"])
                 whisper_data = run_whisper(audio_path, tmp_path / "out")
-                timings, cost = align_words(target_tokens, whisper_data)
+                transcript_payload = build_transcript_payload(whisper_data)
+                if target_tokens:
+                    timings, cost = align_words(target_tokens, whisper_data)
+                else:
+                    timings = transcript_payload["timings"]
+                    cost = 0
 
             payload = json.dumps(
                 {
+                    **transcript_payload,
                     "timings": timings,
                     "source": "faster-whisper-large-v2",
                     "alignmentCost": cost,
