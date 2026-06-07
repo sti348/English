@@ -5,15 +5,20 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
+import uuid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 ROOT = Path(__file__).resolve().parent
 WHISPER_EXE = Path(r"D:\Programs\VideoCaptioner\resource\bin\Faster-Whisper-XXL\faster-whisper-xxl.exe")
 MODEL_DIR = Path(r"D:\Programs\VideoCaptioner\AppData\models")
 MODEL_NAME = "large-v2"
+JOBS = {}
+JOBS_LOCK = threading.Lock()
 
 
 def normalize_word(word):
@@ -140,7 +145,7 @@ def parse_multipart(body, content_type):
     return parts
 
 
-def run_whisper(audio_path, output_dir):
+def run_whisper(audio_path, output_dir, progress=None):
     cmd = [
         str(WHISPER_EXE),
         str(audio_path),
@@ -162,7 +167,10 @@ def run_whisper(audio_path, output_dir):
         "-o",
         str(output_dir),
     ]
-    completed = subprocess.run(
+    if progress:
+      progress("starting faster-whisper", "Launching faster-whisper-large-v2...")
+
+    process = subprocess.Popen(
         cmd,
         cwd=str(ROOT),
         stdout=subprocess.PIPE,
@@ -171,14 +179,125 @@ def run_whisper(audio_path, output_dir):
         encoding="utf-8",
         errors="ignore",
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-        timeout=900,
     )
-    if completed.returncode != 0:
-        raise RuntimeError(completed.stdout[-2000:])
+    output_lines = []
+    started = time.time()
+    while True:
+        if process.stdout is None:
+            break
+        line = process.stdout.readline()
+        if line:
+            clean = line.strip()
+            if clean:
+                output_lines.append(clean)
+                output_lines = output_lines[-80:]
+                if progress:
+                    progress("transcribing", clean[-500:])
+        elif process.poll() is not None:
+            break
+
+        if time.time() - started > 900:
+            process.kill()
+            raise RuntimeError("Whisper timed out after 15 minutes.")
+
+    return_code = process.wait()
+    if return_code != 0:
+        detail = "\n".join(output_lines[-20:]).strip()
+        raise RuntimeError(detail or f"Whisper exited with code {return_code}.")
+
+    if progress:
+        progress("reading result", "Reading faster-whisper JSON result...")
     json_files = list(Path(output_dir).glob("*.json"))
     if not json_files:
-        raise RuntimeError("Whisper did not write a JSON result.")
+        detail = "\n".join(output_lines[-20:]).strip()
+        raise RuntimeError(f"Whisper did not write a JSON result. {detail}".strip())
     return json.loads(json_files[0].read_text(encoding="utf-8"))
+
+
+def build_result(audio_content, filename, target_tokens=None, progress=None):
+    suffix = Path(filename or "audio.wav").suffix or ".wav"
+    with tempfile.TemporaryDirectory(prefix="shadowing_whisper_") as tmp:
+        tmp_path = Path(tmp)
+        audio_path = tmp_path / f"upload{suffix}"
+        if progress:
+            progress("upload received", f"Received audio file ({len(audio_content) / 1024 / 1024:.1f} MB).")
+        audio_path.write_bytes(audio_content)
+        whisper_data = run_whisper(audio_path, tmp_path / "out", progress)
+        if progress:
+            progress("building transcript", "Building transcript and word timing...")
+        transcript_payload = build_transcript_payload(whisper_data)
+        if target_tokens:
+            timings, cost = align_words(target_tokens, whisper_data)
+        else:
+            timings = transcript_payload["timings"]
+            cost = 0
+        return {
+            **transcript_payload,
+            "timings": timings,
+            "source": "faster-whisper-large-v2",
+            "alignmentCost": cost,
+        }
+
+
+def set_job(job_id, **updates):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if not job:
+            return
+        job.update(updates)
+        job["updatedAt"] = time.time()
+
+
+def cleanup_jobs():
+    cutoff = time.time() - 3600
+    with JOBS_LOCK:
+        for job_id in list(JOBS):
+            job = JOBS[job_id]
+            if job.get("updatedAt", job.get("createdAt", 0)) < cutoff:
+                del JOBS[job_id]
+
+
+def start_transcription_job(audio_content, filename, target_tokens=None):
+    cleanup_jobs()
+    job_id = uuid.uuid4().hex
+    now = time.time()
+    with JOBS_LOCK:
+        JOBS[job_id] = {
+            "id": job_id,
+            "status": "queued",
+            "stage": "queued",
+            "message": "Queued transcription job...",
+            "createdAt": now,
+            "updatedAt": now,
+            "result": None,
+            "error": None,
+        }
+
+    def progress(stage, message):
+        set_job(job_id, status="running", stage=stage, message=message)
+
+    def worker():
+        try:
+            result = build_result(audio_content, filename, target_tokens, progress)
+            set_job(
+                job_id,
+                status="done",
+                stage="done",
+                message=f"Finished: recognized {len(result.get('timings', []))} words.",
+                result=result,
+            )
+        except Exception as exc:
+            set_job(
+                job_id,
+                status="error",
+                stage="failed",
+                message="Transcription failed.",
+                error=str(exc) or exc.__class__.__name__,
+            )
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    return job_id
 
 
 def align_words(target_tokens, whisper_data):
@@ -265,7 +384,8 @@ class Handler(SimpleHTTPRequestHandler):
         return str((ROOT / rel).resolve())
 
     def do_POST(self):
-        if self.path != "/api/transcribe-align":
+        parsed = urlparse(self.path)
+        if parsed.path not in {"/api/transcribe-align", "/api/transcribe-start"}:
             self.send_error(404)
             return
         try:
@@ -279,28 +399,13 @@ class Handler(SimpleHTTPRequestHandler):
             if token_part:
                 target_tokens = json.loads(token_part["content"].decode("utf-8"))
 
-            suffix = Path(audio["filename"] or "audio.wav").suffix or ".wav"
-            with tempfile.TemporaryDirectory(prefix="shadowing_whisper_") as tmp:
-                tmp_path = Path(tmp)
-                audio_path = tmp_path / f"upload{suffix}"
-                audio_path.write_bytes(audio["content"])
-                whisper_data = run_whisper(audio_path, tmp_path / "out")
-                transcript_payload = build_transcript_payload(whisper_data)
-                if target_tokens:
-                    timings, cost = align_words(target_tokens, whisper_data)
-                else:
-                    timings = transcript_payload["timings"]
-                    cost = 0
+            if parsed.path == "/api/transcribe-start":
+                job_id = start_transcription_job(audio["content"], audio["filename"], target_tokens)
+                payload = json.dumps({"jobId": job_id}, ensure_ascii=False).encode("utf-8")
+            else:
+                result = build_result(audio["content"], audio["filename"], target_tokens)
+                payload = json.dumps(result, ensure_ascii=False).encode("utf-8")
 
-            payload = json.dumps(
-                {
-                    **transcript_payload,
-                    "timings": timings,
-                    "source": "faster-whisper-large-v2",
-                    "alignmentCost": cost,
-                },
-                ensure_ascii=False,
-            ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
@@ -313,6 +418,33 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        if parsed.path != "/api/transcribe-progress":
+            return super().do_GET()
+
+        job_id = parse_qs(parsed.query).get("id", [""])[0]
+        with JOBS_LOCK:
+            job = dict(JOBS.get(job_id) or {})
+
+        if not job:
+            payload = json.dumps({"status": "missing", "error": "Transcription job was not found."}).encode("utf-8")
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+
+        job["elapsed"] = round(time.time() - job.get("createdAt", time.time()), 1)
+        payload = json.dumps(job, ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
     def guess_type(self, path):
         if path.endswith(".json"):

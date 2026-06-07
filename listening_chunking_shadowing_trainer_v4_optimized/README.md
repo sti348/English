@@ -49,7 +49,7 @@ Then open:
 http://localhost:8000/listening_chunking_shadowing_trainer_optimized.html
 ```
 
-Uploaded audio is sent only to this local server. The page replaces the reading text with the recognized transcript and uses the returned word timestamps for real-time highlighting. The server uses:
+Uploaded audio is sent only to this local server. The page replaces the reading text with the recognized transcript and uses the returned word timestamps for real-time highlighting. Transcription runs as a local background job, so the page shows the current stage, elapsed time, and any real error message while faster-whisper is working. The server uses:
 
 ```text
 D:\Programs\VideoCaptioner\AppData\models\faster-whisper-large-v2

@@ -410,6 +410,7 @@ let activeTimings = optimizedTimings;
 let activeTimingSource = "embedded faster-whisper word timing";
 let transcriptionPending = false;
 let transcriptionRequestId = 0;
+let transcriptionPollTimer = null;
 
 let audioContext = null;
 let sourceNode = null;
@@ -917,17 +918,79 @@ async function loadBundledWhisperTimings() {
   }
 }
 
-async function requestWhisperTranscript(file) {
+function stopTranscriptionPolling() {
+  if (transcriptionPollTimer) {
+    clearTimeout(transcriptionPollTimer);
+    transcriptionPollTimer = null;
+  }
+}
+
+function formatTranscriptionStatus(job) {
+  const elapsed = typeof job.elapsed === "number" ? `${job.elapsed.toFixed(1)}s` : "";
+  const stage = job.stage || job.status || "working";
+  const message = job.message || "Transcribing audio...";
+  return [`Transcribing: ${stage}`, elapsed, message].filter(Boolean).join(" · ");
+}
+
+function formatTranscriptionError(error) {
+  const text = String(error && error.message ? error.message : error || "").trim();
+  if (!text) return "Unknown transcription error.";
+  return text.length > 500 ? text.slice(0, 500) + "..." : text;
+}
+
+async function fetchJsonOrThrow(url, options) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  if (!response.ok) throw new Error(text || `${response.status} ${response.statusText}`);
+  return text ? JSON.parse(text) : {};
+}
+
+async function waitForWhisperJob(jobId, requestId) {
+  return new Promise((resolve, reject) => {
+    const poll = async () => {
+      if (requestId !== transcriptionRequestId) return;
+      try {
+        const job = await fetchJsonOrThrow(`/api/transcribe-progress?id=${encodeURIComponent(jobId)}&t=${Date.now()}`);
+        if (requestId !== transcriptionRequestId) return;
+
+        if (job.status === "done") {
+          transcriptionPollTimer = null;
+          resolve(job.result);
+          return;
+        }
+
+        if (job.status === "error" || job.status === "missing") {
+          transcriptionPollTimer = null;
+          reject(new Error(job.error || job.message || "Local transcription failed."));
+          return;
+        }
+
+        recordStatus.textContent = formatTranscriptionStatus(job);
+        transcriptionPollTimer = setTimeout(poll, 1000);
+      } catch (error) {
+        transcriptionPollTimer = null;
+        reject(error);
+      }
+    };
+    poll();
+  });
+}
+
+async function requestWhisperTranscript(file, requestId) {
+  if (location.protocol === "file:") {
+    throw new Error("This page is opened as a local file. Please use http://localhost:8000/listening_chunking_shadowing_trainer_optimized.html for local transcription.");
+  }
+
   const form = new FormData();
   form.append("audio", file);
 
-  const response = await fetch("/api/transcribe-align", {
+  const start = await fetchJsonOrThrow("/api/transcribe-start", {
     method: "POST",
     body: form
   });
-  if (!response.ok) throw new Error(await response.text());
-  const data = await response.json();
-  return data;
+  if (!start.jobId) throw new Error("Local server did not return a transcription job id.");
+  recordStatus.textContent = "Transcribing: queued · waiting for faster-whisper...";
+  return waitForWhisperJob(start.jobId, requestId);
 }
 
 audio.addEventListener("play", () => {
@@ -1238,6 +1301,7 @@ audioFile.addEventListener("change", () => {
   const file = audioFile.files && audioFile.files[0];
   if (!file) return;
   const requestId = ++transcriptionRequestId;
+  stopTranscriptionPolling();
   audio.src = URL.createObjectURL(file);
   audio.load();
   externalAudioMode = true;
@@ -1245,8 +1309,8 @@ audioFile.addEventListener("change", () => {
   activeTimingSource = "estimated timing";
   transcriptionPending = true;
   shadowBtn.disabled = false;
-  recordStatus.textContent = "Audio loaded. Transcribing with local faster-whisper service...";
-  requestWhisperTranscript(file)
+  recordStatus.textContent = "Audio loaded. Starting local faster-whisper transcription...";
+  requestWhisperTranscript(file, requestId)
     .then(data => {
       if (requestId !== transcriptionRequestId) return;
       applyTranscribedAudio(data);
@@ -1259,7 +1323,7 @@ audioFile.addEventListener("change", () => {
       transcriptionPending = false;
       activeTimings = null;
       activeTimingSource = "estimated timing";
-      recordStatus.textContent = "Audio ready, but local transcription failed. Open through http://localhost:8000 and keep whisper_alignment_server.py running.";
+      recordStatus.textContent = `Audio ready, but local transcription failed: ${formatTranscriptionError(error)}`;
     });
 });
 
