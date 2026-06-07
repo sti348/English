@@ -14,8 +14,8 @@ This version is optimized for the bundled WAV:
   - suggested chunks
   - export chunks
   - built-in read aloud
-- uploaded audio playback
-- automatic local transcription and word highlighting for uploaded audio
+  - uploaded audio playback
+  - automatic local transcription and word highlighting for uploaded audio
   - shadowing recording
   - mixed audio export
   - mic-only export
@@ -53,6 +53,21 @@ Uploaded audio is sent only to this local server. The page replaces the reading 
 
 ```text
 D:\Programs\VideoCaptioner\AppData\models\faster-whisper-large-v2
+```
+
+By default, the local server runs faster-whisper on CUDA GPU with `float16` compute:
+
+```text
+WHISPER_DEVICE=cuda
+WHISPER_COMPUTE_TYPE=float16
+```
+
+If you need to force CPU mode, start the server from PowerShell like this:
+
+```powershell
+$env:WHISPER_DEVICE="cpu"
+$env:WHISPER_COMPUTE_TYPE="int8"
+D:\Programs\VideoCaptioner\runtime\python.exe whisper_alignment_server.py
 ```
 
 If you only need static playback without Whisper alignment, you can still run:

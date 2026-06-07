@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parent
 WHISPER_EXE = Path(r"D:\Programs\VideoCaptioner\resource\bin\Faster-Whisper-XXL\faster-whisper-xxl.exe")
 MODEL_DIR = Path(r"D:\Programs\VideoCaptioner\AppData\models")
 MODEL_NAME = "large-v2"
+WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cuda")
+WHISPER_COMPUTE_TYPE = os.environ.get("WHISPER_COMPUTE_TYPE", "float16")
 JOBS = {}
 JOBS_LOCK = threading.Lock()
 
@@ -156,7 +158,9 @@ def run_whisper(audio_path, output_dir, progress=None):
         "-l",
         "en",
         "-d",
-        "cpu",
+        WHISPER_DEVICE,
+        "--compute_type",
+        WHISPER_COMPUTE_TYPE,
         "--output_format",
         "json",
         "--word_timestamps",
@@ -168,7 +172,10 @@ def run_whisper(audio_path, output_dir, progress=None):
         str(output_dir),
     ]
     if progress:
-      progress("starting faster-whisper", "Launching faster-whisper-large-v2...")
+      progress(
+          "starting faster-whisper",
+          f"Launching faster-whisper-large-v2 on {WHISPER_DEVICE} ({WHISPER_COMPUTE_TYPE})...",
+      )
 
     process = subprocess.Popen(
         cmd,
